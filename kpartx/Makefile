@@ -13,7 +13,7 @@ ifneq ($(strip $(LIBDM_API_COOKIE)),0)
 endif
 
 LDFLAGS = -ldevmapper
-OBJS = bsd.o dos.o kpartx.o solaris.o unixware.o dasd.o sun.o \
+OBJS = aixlvm.o bsd.o dos.o kpartx.o solaris.o unixware.o dasd.o sun.o \
        gpt.o mac.o ps3.o crc32.o lopart.o xstrncpy.o devmapper.o
 EXEC = kpartx
 

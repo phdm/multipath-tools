@@ -74,6 +74,7 @@ static void
 initpts(void)
 {
 	addpts("gpt", read_gpt_pt);
+	addpts("aixlvm", read_aixlvm_pt);
 	addpts("dos", read_dos_pt);
 	addpts("bsd", read_bsd_pt);
 	addpts("solaris", read_solaris_pt);
