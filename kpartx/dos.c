@@ -82,6 +82,10 @@ read_dos_pt(int fd, struct slice all, struct slice *sp, int ns) {
 	if (bp == NULL)
 		return -1;
 
+	/* some AIX disks have a fake dos partition table */
+	if (bp[0] == 0xC9 && bp[1] == 0xC2 && bp[2] == 0xD4 && bp[3] == 0xC1)
+		return -1;
+
 	if (bp[510] != 0x55 || bp[511] != 0xaa)
 		return -1;
 
