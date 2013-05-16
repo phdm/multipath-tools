@@ -154,7 +154,6 @@ static struct lvname *alloc_lvn(int fd, u32 lba)
 int
 read_aixlvm_pt(int fd, struct slice all, struct slice *sp, int ns) {
 	unsigned long offset = all.start;
-	int i;
 	char *bp;
 	u32 pp_bytes_size;
 	u32 pp_blocks_size = 0;
@@ -232,6 +231,7 @@ read_aixlvm_pt(int fd, struct slice all, struct slice *sp, int ns) {
 	if (pvd) {
 		int numpps = be16_to_cpu(pvd->pp_count);
 		int psn_part1 = be32_to_cpu(pvd->psn_part1);
+#if 0
 		int i;
 		int cur_lv_ix = -1;
 		int next_lp_ix = 1;
@@ -272,6 +272,95 @@ read_aixlvm_pt(int fd, struct slice all, struct slice *sp, int ns) {
 			if (lvip[i].pps_found && !lvip[i].lv_is_contiguous)
 				printf("partition %s (%u pp's found) is not contiguous\n",
 					n[i].name, lvip[i].pps_found);
+#else
+		int i;
+		unsigned short *pps_by_lvs;
+		unsigned short *start_of_pps_array_of_lv;
+
+		pps_by_lvs = calloc(1016, sizeof(unsigned short));
+		start_of_pps_array_of_lv = calloc(numlvs, sizeof(unsigned short));
+		start_of_pps_array_of_lv[0] = 0;
+		for (i = 0; i < numlvs - 1; i += 1)
+			start_of_pps_array_of_lv[i + 1] = start_of_pps_array_of_lv[i] + lvip[i].pps_per_lv;
+		for (i = 0; i < numpps; i += 1) {
+			struct ppe *p = pvd->ppe + i;
+			unsigned int lp_ix;
+			unsigned int lv_ix;
+
+			lp_ix = be16_to_cpu(p->lp_ix);
+			if (!lp_ix)
+				continue;
+			lv_ix = be16_to_cpu(p->lv_ix) - 1;
+			pps_by_lvs[start_of_pps_array_of_lv[lv_ix] + lp_ix - 1] = i;
+		}
+		for (i = 0; i < numlvs; i += 1) {
+			int j;
+
+			printf("%s:", n[i].name);
+			for (j = 0; j < lvip[i].pps_per_lv; j += 1)
+				printf(" %u", pps_by_lvs[start_of_pps_array_of_lv[i] + j] + 1);
+			printf("\n");
+		}
+		for (i = 0; i < numlvs; i += 1) {
+			int j;
+			int first_pp, cur_pp;
+
+			printf("%s:", n[i].name);
+			for (j = 0; j < lvip[i].pps_per_lv; j += 1) {
+				int this_pp = pps_by_lvs[start_of_pps_array_of_lv[i] + j] + 1;
+
+				if (j == 0) {
+					first_pp = this_pp;
+					cur_pp = this_pp;
+				} else if (this_pp == cur_pp + 1)
+					cur_pp = this_pp;
+				else {
+					if (cur_pp != first_pp)
+						printf(" %u-%u", first_pp, cur_pp);
+					else
+						printf(" %u", first_pp);
+					first_pp = this_pp;
+					cur_pp = this_pp;
+				}
+			}
+			if (cur_pp != first_pp)
+				printf(" %u-%u\n", first_pp, cur_pp);
+			else
+				printf(" %u\n", first_pp);
+		}
+		for (i = 0; i < numlvs; i += 1) {
+			int j, first_j = 0;
+			int first_pp, cur_pp;
+
+			printf("dmsetup create %s << EOT\n", n[i].name);
+			for (j = 0; j < lvip[i].pps_per_lv; j += 1) {
+				int this_pp = pps_by_lvs[start_of_pps_array_of_lv[i] + j] + 1;
+
+				if (j == 0) {
+					first_pp = this_pp;
+					cur_pp = this_pp;
+				} else if (this_pp == cur_pp + 1)
+					cur_pp = this_pp;
+				else {
+					printf("%u %u linear $DEVICE %u\n",
+						first_j * pp_blocks_size,
+						(cur_pp - first_pp + 1) * pp_blocks_size,
+						(first_pp - 1) * pp_blocks_size + psn_part1);
+					first_j = j;
+					first_pp = this_pp;
+					cur_pp = this_pp;
+				}
+			}
+			if (j)
+				printf("%u %u linear $DEVICE %u\n",
+					first_j * pp_blocks_size,
+					(cur_pp - first_pp + 1) * pp_blocks_size,
+					(first_pp - 1) * pp_blocks_size + psn_part1);
+			printf("EOT\n");
+		}
+		free(start_of_pps_array_of_lv);
+		free(pps_by_lvs);
+#endif
 		free(pvd);
 	}
 	if (n)
